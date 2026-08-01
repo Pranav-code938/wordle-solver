@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Wordle Solver</title>
+  <title>Auto Wordle Guesser</title>
   <style>
     :root {
       --gray: #787c7e;
@@ -22,24 +22,11 @@
       display: flex;
       flex-direction: column;
       align-items: center;
+      text-align: center;
     }
     h1 { margin-bottom: 0.5rem; font-size: 2rem; }
-    p.instructions { text-align: center; color: #666; font-size: 0.9rem; margin-bottom: 2rem; }
+    p.instructions { color: #666; font-size: 0.9rem; margin-bottom: 2rem; line-height: 1.4; }
     
-    input[type="text"] {
-      width: 100%;
-      padding: 12px;
-      font-size: 1.5rem;
-      text-align: center;
-      text-transform: uppercase;
-      letter-spacing: 0.2rem;
-      border: 2px solid #d3d6da;
-      border-radius: 4px;
-      margin-bottom: 1.5rem;
-      outline: none;
-    }
-    input[type="text"]:focus { border-color: var(--gray); }
-
     .tiles { display: flex; gap: 8px; margin-bottom: 1.5rem; width: 100%; justify-content: center; }
     .tile {
       width: 60px;
@@ -70,143 +57,151 @@
       border: none;
       border-radius: 4px;
       cursor: pointer;
-      margin-bottom: 2rem;
+      margin-bottom: 1rem;
     }
     button:hover { opacity: 0.9; }
+    #resetBtn { background: var(--gray); }
 
     .dashboard {
       width: 100%;
       padding: 15px;
       background: #f3f4f6;
       border-radius: 8px;
-      text-align: center;
+      box-sizing: border-box;
     }
-    .dashboard h3 { margin: 0 0 10px 0; font-size: 1.1rem; }
     .stat { font-size: 1.5rem; font-weight: bold; color: var(--green); margin: 5px 0; }
   </style>
 </head>
 <body>
 
-  <h1>Solver</h1>
-  <p class="instructions">Type a guess, tap the tiles to match your Wordle colors, then calculate the next best word.</p>
+  <h1>Auto Guesser</h1>
+  <p class="instructions">Enter this word into Wordle.<br>Tap the tiles below to match the colors Wordle gives you, then click Next Guess.</p>
 
-  <input type="text" id="guessInput" maxlength="5" placeholder="ENTER WORD" autofocus autocomplete="off">
-  
   <div class="tiles" id="tileContainer">
-    <div class="tile" data-state="0"></div>
-    <div class="tile" data-state="0"></div>
-    <div class="tile" data-state="0"></div>
-    <div class="tile" data-state="0"></div>
-    <div class="tile" data-state="0"></div>
+    <div class="tile" data-state="0">L</div>
+    <div class="tile" data-state="0">O</div>
+    <div class="tile" data-state="0">A</div>
+    <div class="tile" data-state="0">D</div>
+    <div class="tile" data-state="0">!</div>
   </div>
 
-  <button id="submitBtn">Calculate Next Guess</button>
+  <button id="submitBtn" disabled>Loading Dictionary...</button>
+  <button id="resetBtn">Start Over</button>
 
   <div class="dashboard">
-    <h3>Suggested Next Word:</h3>
-    <div class="stat" id="topRecommendation">SALET</div>
-    <hr style="border: 0; border-top: 1px solid #ddd; margin: 15px 0;">
-    <h3>Possible Words Remaining:</h3>
-    <div class="stat" style="color: var(--text);" id="candidateCount">Loading...</div>
+    <h3 style="margin: 0 0 10px 0; font-size: 1.1rem;">Possible Words Remaining:</h3>
+    <div class="stat" style="color: var(--text);" id="candidateCount">--</div>
   </div>
 
   <script>
-    let solutions = [];
+    let allWords = [];
+    let possibleWords = [];
+    let currentGuess = "salet"; // The statistically best starting word
     const tiles = Array.from(document.querySelectorAll('.tile'));
-    const input = document.getElementById('guessInput');
     const btn = document.getElementById('submitBtn');
-
-    // Load solutions file
-    fetch('./solutions.json')
-      .then(res => res.json())
-      .then(data => {
-        solutions = data;
-        document.getElementById('candidateCount').textContent = solutions.length;
-      })
-      .catch(err => {
-        document.getElementById('candidateCount').textContent = "Error loading JSON";
-      });
-
-    // Sync input letters to tiles
-    input.addEventListener('input', (e) => {
-      // Remove non-letters
-      e.target.value = e.target.value.replace(/[^a-zA-Z]/g, ''); 
-      const val = e.target.value;
-      tiles.forEach((tile, i) => {
-        tile.textContent = val[i] ? val[i].toUpperCase() : '';
-      });
+    
+    // 1. Fetch the official 14,000+ Wordle word lists on load
+    Promise.all([
+      fetch('https://raw.githubusercontent.com/cfreshman/wordle-answers/main/wordle-answers-alphabetical.txt').then(r => r.text()),
+      fetch('https://raw.githubusercontent.com/cfreshman/wordle-allowed-guesses/main/wordle-allowed-guesses.txt').then(r => r.text())
+    ]).then(([answers, guesses]) => {
+      // Split text into arrays, clean up, and merge into one massive dictionary
+      const ansArr = answers.split('\n').map(w => w.trim().toLowerCase()).filter(w => w.length === 5);
+      const guessArr = guesses.split('\n').map(w => w.trim().toLowerCase()).filter(w => w.length === 5);
+      
+      allWords = Array.from(new Set([...ansArr, ...guessArr]));
+      startGame();
+    }).catch(err => {
+      btn.textContent = "Network Error loading words";
     });
+
+    function startGame() {
+      possibleWords = [...allWords];
+      currentGuess = "salet";
+      updateUI();
+      btn.textContent = "Generate Next Guess";
+      btn.disabled = false;
+    }
+
+    function updateUI() {
+      const chars = currentGuess.split('');
+      tiles.forEach((tile, i) => {
+        tile.textContent = chars[i].toUpperCase();
+        tile.setAttribute('data-state', '0'); // Reset to gray
+      });
+      document.getElementById('candidateCount').textContent = possibleWords.length;
+    }
 
     // Tap tiles to toggle colors: 0 (Gray) -> 1 (Yellow) -> 2 (Green)
     tiles.forEach(tile => {
       tile.addEventListener('click', () => {
-        if (!tile.textContent) return; // Don't color empty tiles
         let state = parseInt(tile.getAttribute('data-state'));
         state = (state + 1) % 3;
         tile.setAttribute('data-state', state);
       });
     });
 
-    // Calculate Button Logic
+    // Generate what pattern Wordle WOULD give if 'secret' was the answer and 'guess' was played
+    function getPattern(guess, secret) {
+      let pattern = [0, 0, 0, 0, 0];
+      let secretArr = secret.split('');
+      let guessArr = guess.split('');
+
+      // First pass: Find Exact Matches (Green)
+      for (let i = 0; i < 5; i++) {
+        if (guessArr[i] === secretArr[i]) {
+          pattern[i] = 2;
+          secretArr[i] = null;
+          guessArr[i] = null;
+        }
+      }
+
+      // Second pass: Find Partial Matches (Yellow)
+      for (let i = 0; i < 5; i++) {
+        if (guessArr[i] !== null) {
+          let idx = secretArr.indexOf(guessArr[i]);
+          if (idx !== -1) {
+            pattern[i] = 1;
+            secretArr[idx] = null;
+          }
+        }
+      }
+      return pattern;
+    }
+
+    // Process the colors the user entered
     btn.addEventListener('click', () => {
-      const guess = input.value.toLowerCase();
-      if (guess.length !== 5) {
-        alert("Please enter a full 5-letter word.");
+      const userPattern = tiles.map(t => parseInt(t.getAttribute('data-state'))).join('');
+
+      // Filter words: keep only words that would produce the exact same color pattern
+      possibleWords = possibleWords.filter(word => {
+        return getPattern(currentGuess, word).join('') === userPattern;
+      });
+
+      if (possibleWords.length === 0) {
+        alert("No words match this pattern! Are you sure the colors are entered correctly?");
+        return;
+      }
+      if (possibleWords.length === 1) {
+        currentGuess = possibleWords[0];
+        updateUI();
+        btn.textContent = "Word Found!";
+        btn.disabled = true;
+        
+        // Color it all green to celebrate
+        tiles.forEach(t => t.setAttribute('data-state', '2'));
         return;
       }
 
-      const pattern = tiles.map(t => parseInt(t.getAttribute('data-state')));
-
-      // Filter remaining words
-      solutions = solutions.filter(word => matchesPattern(word, guess, pattern));
-
-      // Update Dashboard
-      document.getElementById('candidateCount').textContent = solutions.length;
-      document.getElementById('topRecommendation').textContent = getBestGuess(solutions);
-
-      // Reset for next turn
-      input.value = '';
-      tiles.forEach(t => {
-        t.textContent = '';
-        t.setAttribute('data-state', '0');
-      });
+      // Find next best guess based on letter frequencies in remaining words
+      currentGuess = getBestGuess(possibleWords);
+      updateUI();
     });
 
-    // Check if a possible word matches the colors we just entered
-    function matchesPattern(solution, guess, pattern) {
-      let solArr = solution.split('');
-      let guessArr = guess.split('');
-
-      // Check Greens First
-      for (let i = 0; i < 5; i++) {
-        if (pattern[i] === 2) {
-          if (solArr[i] !== guessArr[i]) return false;
-          solArr[i] = null; // consume
-        }
-      }
-
-      // Check Yellows & Grays
-      for (let i = 0; i < 5; i++) {
-        if (pattern[i] === 1) { // Yellow
-          if (solArr[i] === guessArr[i]) return false;
-          const idx = solArr.indexOf(guessArr[i]);
-          if (idx === -1) return false;
-          solArr[idx] = null; // consume
-        } else if (pattern[i] === 0) { // Gray
-          if (solArr.indexOf(guessArr[i]) !== -1) return false;
-        }
-      }
-      return true;
-    }
-
-    // Rank remaining words by letter frequency
+    // Score words by how many frequent letters they contain
     function getBestGuess(candidates) {
-      if (candidates.length === 0) return "NONE FOUND";
-      if (candidates.length === 1) return candidates[0].toUpperCase();
-
       const freqs = {};
       candidates.forEach(w => {
-        // Count unique letters per word to favor words with diverse letters
         new Set(w.split('')).forEach(char => {
           freqs[char] = (freqs[char] || 0) + 1;
         });
@@ -216,15 +211,26 @@
       let bestScore = -1;
 
       candidates.forEach(w => {
-        const score = Array.from(new Set(w.split(''))).reduce((sum, char) => sum + (freqs[char] || 0), 0);
+        let score = 0;
+        // Count unique letters to prefer words that test 5 different letters
+        new Set(w.split('')).forEach(char => {
+          score += freqs[char] || 0;
+        });
+
         if (score > bestScore) {
           bestScore = score;
           bestWord = w;
         }
       });
 
-      return bestWord.toUpperCase();
+      return bestWord;
     }
+
+    // Reset game
+    document.getElementById('resetBtn').addEventListener('click', () => {
+      if(allWords.length > 0) startGame();
+    });
+
   </script>
 </body>
 </html>
