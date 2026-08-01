@@ -60,6 +60,7 @@
       margin-bottom: 1rem;
     }
     button:hover { opacity: 0.9; }
+    button:disabled { background: var(--gray); cursor: not-allowed; }
     #resetBtn { background: var(--gray); }
 
     .dashboard {
@@ -70,12 +71,13 @@
       box-sizing: border-box;
     }
     .stat { font-size: 1.5rem; font-weight: bold; color: var(--green); margin: 5px 0; }
+    #wordList { font-size: 0.9rem; color: #666; margin-top: 10px; text-transform: uppercase; }
   </style>
 </head>
 <body>
 
   <h1>Auto Guesser</h1>
-  <p class="instructions">Enter this word into Wordle.<br>Tap the tiles below to match the colors Wordle gives you, then click Next Guess.</p>
+  <p class="instructions">Enter the word into Wordle.<br>Tap the tiles below to match the colors Wordle gives you, then click Next Guess.</p>
 
   <div class="tiles" id="tileContainer">
     <div class="tile" data-state="0">L</div>
@@ -91,29 +93,35 @@
   <div class="dashboard">
     <h3 style="margin: 0 0 10px 0; font-size: 1.1rem;">Possible Words Remaining:</h3>
     <div class="stat" style="color: var(--text);" id="candidateCount">--</div>
+    <div id="wordList"></div>
   </div>
 
   <script>
     let allWords = [];
     let possibleWords = [];
-    let currentGuess = "salet"; // The statistically best starting word
+    let currentGuess = "salet"; 
     const tiles = Array.from(document.querySelectorAll('.tile'));
     const btn = document.getElementById('submitBtn');
     
-    // 1. Fetch the official 14,000+ Wordle word lists on load
-    Promise.all([
-      fetch('https://raw.githubusercontent.com/cfreshman/wordle-answers/main/wordle-answers-alphabetical.txt').then(r => r.text()),
-      fetch('https://raw.githubusercontent.com/cfreshman/wordle-allowed-guesses/main/wordle-allowed-guesses.txt').then(r => r.text())
-    ]).then(([answers, guesses]) => {
-      // Split text into arrays, clean up, and merge into one massive dictionary
-      const ansArr = answers.split('\n').map(w => w.trim().toLowerCase()).filter(w => w.length === 5);
-      const guessArr = guesses.split('\n').map(w => w.trim().toLowerCase()).filter(w => w.length === 5);
-      
-      allWords = Array.from(new Set([...ansArr, ...guessArr]));
-      startGame();
-    }).catch(err => {
-      btn.textContent = "Network Error loading words";
-    });
+    // Fetch a reliable, single-file Wordle dictionary
+    fetch('https://raw.githubusercontent.com/tabatkins/wordle-list/main/words')
+      .then(res => {
+        if (!res.ok) throw new Error("Network response was not OK");
+        return res.text();
+      })
+      .then(text => {
+        // Clean text and ensure we only keep 5-letter words
+        allWords = text.split('\n').map(w => w.trim().toLowerCase()).filter(w => w.length === 5);
+        
+        if (allWords.length === 0) throw new Error("Dictionary parsed empty");
+        
+        startGame();
+      })
+      .catch(err => {
+        console.error(err);
+        btn.textContent = "Network Error loading words";
+        alert("Could not load the dictionary. Please check your internet connection.");
+      });
 
     function startGame() {
       possibleWords = [...allWords];
@@ -129,7 +137,15 @@
         tile.textContent = chars[i].toUpperCase();
         tile.setAttribute('data-state', '0'); // Reset to gray
       });
+      
       document.getElementById('candidateCount').textContent = possibleWords.length;
+      
+      // Bonus feature: Show the words if there are only a few left!
+      if (possibleWords.length <= 15 && possibleWords.length > 1) {
+         document.getElementById('wordList').textContent = possibleWords.join(', ');
+      } else {
+         document.getElementById('wordList').textContent = "";
+      }
     }
 
     // Tap tiles to toggle colors: 0 (Gray) -> 1 (Yellow) -> 2 (Green)
@@ -141,13 +157,13 @@
       });
     });
 
-    // Generate what pattern Wordle WOULD give if 'secret' was the answer and 'guess' was played
+    // Simulate Wordle's exact logic
     function getPattern(guess, secret) {
       let pattern = [0, 0, 0, 0, 0];
       let secretArr = secret.split('');
       let guessArr = guess.split('');
 
-      // First pass: Find Exact Matches (Green)
+      // First pass: Exact Matches (Green)
       for (let i = 0; i < 5; i++) {
         if (guessArr[i] === secretArr[i]) {
           pattern[i] = 2;
@@ -156,7 +172,7 @@
         }
       }
 
-      // Second pass: Find Partial Matches (Yellow)
+      // Second pass: Partial Matches (Yellow)
       for (let i = 0; i < 5; i++) {
         if (guessArr[i] !== null) {
           let idx = secretArr.indexOf(guessArr[i]);
@@ -173,14 +189,14 @@
     btn.addEventListener('click', () => {
       const userPattern = tiles.map(t => parseInt(t.getAttribute('data-state'))).join('');
 
-      // Filter words: keep only words that would produce the exact same color pattern
+      // Filter: Keep only words that would generate these exact colors
       possibleWords = possibleWords.filter(word => {
         return getPattern(currentGuess, word).join('') === userPattern;
       });
 
       if (possibleWords.length === 0) {
         alert("No words match this pattern! Are you sure the colors are entered correctly?");
-        return;
+        return; // Early return so we don't crash
       }
       if (possibleWords.length === 1) {
         currentGuess = possibleWords[0];
@@ -193,12 +209,11 @@
         return;
       }
 
-      // Find next best guess based on letter frequencies in remaining words
       currentGuess = getBestGuess(possibleWords);
       updateUI();
     });
 
-    // Score words by how many frequent letters they contain
+    // Pick best word based on letter frequencies
     function getBestGuess(candidates) {
       const freqs = {};
       candidates.forEach(w => {
@@ -212,7 +227,6 @@
 
       candidates.forEach(w => {
         let score = 0;
-        // Count unique letters to prefer words that test 5 different letters
         new Set(w.split('')).forEach(char => {
           score += freqs[char] || 0;
         });
@@ -226,7 +240,6 @@
       return bestWord;
     }
 
-    // Reset game
     document.getElementById('resetBtn').addEventListener('click', () => {
       if(allWords.length > 0) startGame();
     });
