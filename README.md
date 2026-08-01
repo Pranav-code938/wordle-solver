@@ -2,8 +2,6 @@
 
 A blazing-fast, interactive Wordle assistant that calculates the optimal next guess based on tile colors. 
 
-🚀 **[View the Live Demo](https://[your-username].github.io/wordle-solver/)** *(Update this link once GitHub Pages is live!)*
-
 ## Features
 
 * **Zero-Lag Calculations:** Filters the candidate pool and calculates letter frequency instantly.
